@@ -6,6 +6,14 @@
 //
 
 import SpriteKit
+import Combine 
+
+class SpriteStats: ObservableObject {
+    @Published var rest: Double = 10
+    @Published var abs: Double = 0
+    @Published var happiness: Double = 10
+    @Published var intellect: Double = 10
+}
 
 class ChungusScene: SKScene {
     
@@ -21,6 +29,9 @@ class ChungusScene: SKScene {
     var isMovingLeft: Bool = false
     var isDragged: Bool = false
     var preDragSprite: SKSpriteNode?
+    
+    var stats: SpriteStats = SpriteStats()
+    var currentTask: String = "auto"
     
     var prevX: Double = 0
     var prevY: Double = 0
@@ -104,16 +115,22 @@ class ChungusScene: SKScene {
         
         addChild(currentSprite)
         
-        self.spriteLoop(lowerDuration: 3, upperDuration: 10, lowerDelay: 2, upperDelay: 5)
+        self.restartSpriteLoop()
+        
     }
     
     override func mouseDown(with event: NSEvent) {
-        //        let location = event.location(in: self)
-        // var clickedNode = atPoint(location)
+        let location = event.location(in: self)
+        let clickedNode = atPoint(location)
         
-        //        if clickedNode.name == "Chungus" {
-        mouseOffset = event.locationInWindow
-        //        }
+        if clickedNode.name != nil && clickedNode.name!.contains("Chungus") {
+            mouseOffset = event.locationInWindow
+            
+            if event.clickCount == 2{
+                MenuManager.shared.openMenu(for: self.currentSprite, selectTaskHandler: self.handleSpriteTask, stats: self.stats)
+                return
+            }
+        }
     }
     
     override func mouseDragged(with event: NSEvent) {
@@ -162,38 +179,34 @@ class ChungusScene: SKScene {
         }
     }
     
-    func renderSprite(replaceSprite: SKSpriteNode? = nil){
-        if RuneTimeConstant.spriteDebug { print("Sprite Coordinates: \(self.x), \(self.y)") }
-        
+    func renderSprite(replaceSprite: SKSpriteNode? = nil, yOffset: CGFloat = 0) {
         guard let window = self.view?.window else { return }
         
         self.currentSprite.removeFromParent()
         
         if let newSprite = replaceSprite {
-            // 1. If we passed a specific sprite (sleeping/studying), use it.
             self.currentSprite = newSprite
         } else {
-            // 2. Otherwise, calculate movement for walking/idle.
             let dx = self.x - self.prevX
-            
             if dx == 0 {
                 self.currentSprite = self.idleSprite
             } else {
                 self.currentSprite = self.walkingSprite[self.walkingAnimationIndex]
                 self.walkingAnimationIndex = Int(CACurrentMediaTime() * 10) % self.walkingSprite.count
-                
                 self.currentSprite.xScale = dx < 0 ? -1 : 1
             }
         }
         
-        // Dragging overrides everything
         if self.isDragged {
             self.dizzySprite.xScale = Int(CACurrentMediaTime() * 10) % 2 == 0 ? 1 : -1
             self.currentSprite = self.dizzySprite
         }
         
         addChild(self.currentSprite)
-        window.setFrameOrigin(CGPoint(x: self.x, y: self.y))
+        
+        // THE FIX: Use self.y + yOffset for the visual position,
+        // but self.y stays pure (where the mouse is).
+        window.setFrameOrigin(CGPoint(x: self.x, y: self.y + yOffset))
     }
     
     func walk(dx: Double, dy: Double) {
@@ -305,38 +318,77 @@ class ChungusScene: SKScene {
         let lowerDuration = config["lowerDuration"] as? Double ?? 2.0
         let upperDuration = config["upperDuration"] as? Double ?? 5.0
         let duration = Double.random(in: lowerDuration...upperDuration)
-        let groundY = self.y
         let jumpHeight: Double = 30.0
         
         // customAction gives us 'elapsedTime', which is perfect for syncing
-        return SKAction.customAction(withDuration: duration) { node, elapsedTime in
-            let totalTime = Double(elapsedTime)
-            
-            // 1. Calculate a "Cycle Progress" (0.0 to 1.0)
-            // Adjust 'speed' to change how fast he jumps
+        let jumpRopeAction = SKAction.customAction(withDuration: duration) { node, elapsedTime in
+            // 1. Calculate the repeating progress (0.0 to 1.0)
             let speed = 2.0
-            let progress = (totalTime * speed).truncatingRemainder(dividingBy: 1.0)
+            let progress = (Double(elapsedTime) * speed).truncatingRemainder(dividingBy: 1.0)
             
-            // 2. The Bounce (Sine Wave from 0 to PI)
-            // This ensures starts at 0, peaks at 0.5, and ends at 0
+            // 2. Calculate visual jump offset
             let bounce = sin(progress * .pi) * jumpHeight
-            self.y = groundY + bounce
             
-            // 3. The Texture Sync
-            // Map 0.0-0.33 to Frame 0, 0.33-0.66 to Frame 1, 0.66-1.0 to Frame 2
+            // 3. Texture Sync
             let frameIndex: Int
-            if progress < 0.33 {
-                frameIndex = 0 // Ground
-            } else if progress < 0.66 {
-                frameIndex = 1 // Peak
-            } else {
-                frameIndex = 2 // Middle (Falling)
-            }
+            if progress < 0.33 { frameIndex = 0 }
+            else if progress < 0.66 { frameIndex = 1 }
+            else { frameIndex = 2 }
             
-            // Safety check for array bounds
             let safeIndex = min(frameIndex, self.jumpRopeSprite.count - 1)
-            self.renderSprite(replaceSprite: self.jumpRopeSprite[safeIndex])
+            
+            // 4. RENDER with the offset!
+            // We pass the bounce as an 'offset' so we don't change self.y
+            self.renderSprite(replaceSprite: self.jumpRopeSprite[safeIndex], yOffset: bounce)
         }
+        
+        let resetToIdle = SKAction.run {
+            self.prevX = self.x
+            self.renderSprite()
+        }
+        
+        return SKAction.sequence([jumpRopeAction, resetToIdle])
+        
+    }
+    
+    func taskToFunction(taskName: String) -> ([String: Any]) -> (SKAction) {
+        switch taskName.lowercased() {
+            case "study":
+            return self.getStudyingAction
+        case "sleep":
+            return self.getSleepingAction
+        case "walk":
+            return self.getWalkingAction
+        case "exercise":
+            return self.getJumpRopeAction
+        default:
+            return { _ in SKAction.wait(forDuration: 0.0)}
+        }
+    }
+    
+    func applyActionToStats(taskName: String) -> SKAction {
+        
+        let statsAction = SKAction.run {
+            switch taskName.lowercased() {
+            case "study":
+                self.stats.intellect += 1.0
+            case "sleep":
+                self.stats.rest += 1.0
+            case "walk":
+                self.stats.abs += 0.2
+            case "exercise":
+                self.stats.abs += 1.0
+            default:
+                break
+            }
+        }
+        
+        return statsAction
+    }
+    
+    func restartSpriteLoop(){
+        self.removeAction(forKey: "SpriteLoop")
+        self.spriteLoop(lowerDuration: 3, upperDuration: 10, lowerDelay: 2, upperDelay: 5)
     }
 
     func spriteLoop(lowerDuration: Double, upperDuration: Double, lowerDelay: Double = 2.0, upperDelay: Double = 5.0, step: Int = 2) {
@@ -347,14 +399,21 @@ class ChungusScene: SKScene {
             "step": step
         ]
         
-        let actionFunctions = [self.getWalkingAction, self.getJumpRopeAction, self.getSleepingAction, self.getStudyingAction]
-        
-        let chosenFunction = actionFunctions.randomElement() ?? self.getSleepingAction
-//        let chosenFunction = self.getJumpRopeAction
-
+        var chosenAction: String
+        var waitBetween: SKAction
+                
+        if self.currentTask == "auto" {
+            let availabelActions = ["sleep", "exercise", "study", "walk"]
+            chosenAction = availabelActions.randomElement() ?? "study"
+            waitBetween = SKAction.wait(forDuration: Double.random(in: lowerDelay...upperDelay))
+        } else{
+            chosenAction = self.currentTask
+            waitBetween = SKAction.wait(forDuration: 0.0)
+        }
+        print("Chosen Action: \(chosenAction)")
+        let chosenFunction = self.taskToFunction(taskName: chosenAction)
+        let statsAction = self.applyActionToStats(taskName: chosenAction)
         let actionSequence = chosenFunction(config)
-        
-        let waitBetween = SKAction.wait(forDuration: Double.random(in: lowerDelay...upperDelay))
         
         let queueNext = SKAction.run { [weak self] in
             self?.spriteLoop(
@@ -366,8 +425,14 @@ class ChungusScene: SKScene {
             )
         }
         
-        let mainSequence = SKAction.sequence([actionSequence, waitBetween, queueNext])
+        let mainSequence = SKAction.sequence([actionSequence, statsAction, waitBetween, queueNext])
         
         self.run(mainSequence, withKey: "SpriteLoop")
+    }
+    
+    func handleSpriteTask(taskName: String) {
+        self.currentTask = taskName.lowercased()
+        print("Task \(self.currentTask) received!")
+        self.restartSpriteLoop()
     }
 }
