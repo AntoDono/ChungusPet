@@ -11,7 +11,7 @@ import Combine
 class SpriteStats: ObservableObject {
     @Published var rest: Double = 10
     @Published var abs: Double = 0
-    @Published var happiness: Double = 10
+    @Published var weight: Double = 20
     @Published var intellect: Double = 10
 }
 
@@ -22,15 +22,18 @@ class ChungusScene: SKScene {
     var idleSprite: SKSpriteNode!
     var walkingSprite: [SKSpriteNode]!
     var jumpRopeSprite: [SKSpriteNode]!
+    var eatingSprite: [SKSpriteNode]!
     var walkingAnimationIndex: Int = 0
+    
     var dizzySprite: SKSpriteNode!
     var sleepingSprite: SKSpriteNode!
     var studyingSprite: SKSpriteNode!
     var isMovingLeft: Bool = false
     var isDragged: Bool = false
     var preDragSprite: SKSpriteNode?
+    var fatScale: Float = 1.0
     
-    var stats: SpriteStats = SpriteStats()
+    var stats: SpriteStats!
     var currentTask: String = "auto"
     
     var prevX: Double = 0
@@ -38,78 +41,88 @@ class ChungusScene: SKScene {
     var x: Double = 0
     var y: Double = 0
     
-    func loadSprite(name: String, width: Double, height: Double, x: Double, y: Double) -> SKSpriteNode {
+    init(size: CGSize, stats: SpriteStats) {
+        self.stats = stats
+        super.init(size: size)
+        self._initSprite()
+    }
+    
+    required init?(coder aDecoder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+    
+    func loadSprite(name: String, width: Double, height: Double) -> SKSpriteNode {
         let sprite = SKSpriteNode(imageNamed: name)
         sprite.size = CGSize(width: width, height: height)
         sprite.name = name
-        sprite.position = CGPoint(x: self.x, y: self.y)
         return sprite
     }
     
-    override func didMove(to view: SKView) {
+    func _initSprite() {
         self.backgroundColor = .clear
         
-        self.x = size.width / 2
-        self.y = size.height / 2
+        self.x = ScreenConstant.width / 2
+        self.y = ScreenConstant.height / 2
         
         self.idleSprite = loadSprite(
             name: "ChungusIdle",
             width: SpriteConstant.width,
-            height: SpriteConstant.height,
-            x: self.x, y: self.y)
+            height: SpriteConstant.height)
 
         
         self.dizzySprite = loadSprite(
             name: "ChungusDizzy",
             width: SpriteConstant.width,
-            height: SpriteConstant.height,
-            x: self.x, y: self.y)
+            height: SpriteConstant.height)
         
         self.sleepingSprite = loadSprite(
             name: "ChungusSleeping",
             width: SpriteConstant.width,
-            height: SpriteConstant.height,
-            x: self.x, y: self.y)
+            height: SpriteConstant.height)
         
         self.studyingSprite = loadSprite(
             name: "ChungusStudying",
             width: SpriteConstant.width,
-            height: SpriteConstant.height,
-            x: self.x, y: self.y)
+            height: SpriteConstant.height)
         
         let walkingSprite1 = loadSprite(
             name: "ChungusWalk1",
             width: SpriteConstant.width,
-            height: SpriteConstant.height,
-            x: self.x, y: self.y)
+            height: SpriteConstant.height)
         
         let walkingSprite2 = loadSprite(
             name: "ChungusWalk2",
             width: SpriteConstant.width,
-            height: SpriteConstant.height,
-            x: self.x, y: self.y)
+            height: SpriteConstant.height)
         
         let jumpRopeSprite1 = loadSprite(
             name: "ChungusJumpRope1",
             width: SpriteConstant.width,
-            height: SpriteConstant.height,
-            x: self.x, y: self.y)
+            height: SpriteConstant.height)
         
         let jumpRopeSprite2 = loadSprite(
             name: "ChungusJumpRope2",
             width: SpriteConstant.width,
-            height: SpriteConstant.height,
-            x: self.x, y: self.y)
+            height: SpriteConstant.height)
         
         let jumpRopeSprite3 = loadSprite(
             name: "ChungusJumpRope3",
             width: SpriteConstant.width,
-            height: SpriteConstant.height,
-            x: self.x, y: self.y)
+            height: SpriteConstant.height)
+        
+        let eatingSprite1 = loadSprite(
+            name: "ChungusEating1",
+            width: SpriteConstant.width,
+            height: SpriteConstant.height)
+        
+        let eatingSprite2 = loadSprite(
+            name: "ChungusEating2",
+            width: SpriteConstant.width,
+            height: SpriteConstant.height)
         
         self.jumpRopeSprite = [jumpRopeSprite1, jumpRopeSprite2, jumpRopeSprite3]
-        
         self.walkingSprite = [walkingSprite1, walkingSprite2]
+        self.eatingSprite = [eatingSprite1, eatingSprite2]
         
         self.currentSprite = idleSprite
         
@@ -184,6 +197,8 @@ class ChungusScene: SKScene {
         
         self.currentSprite.removeFromParent()
         
+        var directionScale: CGFloat = 1
+        
         if let newSprite = replaceSprite {
             self.currentSprite = newSprite
         } else {
@@ -193,7 +208,7 @@ class ChungusScene: SKScene {
             } else {
                 self.currentSprite = self.walkingSprite[self.walkingAnimationIndex]
                 self.walkingAnimationIndex = Int(CACurrentMediaTime() * 10) % self.walkingSprite.count
-                self.currentSprite.xScale = dx < 0 ? -1 : 1
+                directionScale = dx < 0 ? -1 : 1
             }
         }
         
@@ -202,6 +217,12 @@ class ChungusScene: SKScene {
             self.currentSprite = self.dizzySprite
         }
         
+        self.fatScale = Float(self.stats.weight / SpriteConstant.baseWeight)
+        self.currentSprite.xScale = CGFloat(self.fatScale)
+        self.currentSprite.yScale = CGFloat(self.fatScale)
+        
+        self.currentSprite.position = CGPoint(x: size.width / 2, y: (size.height / 2) + yOffset)
+        self.currentSprite.xScale *= directionScale
         addChild(self.currentSprite)
         
         // THE FIX: Use self.y + yOffset for the visual position,
@@ -351,6 +372,32 @@ class ChungusScene: SKScene {
         
     }
     
+    func getEatingAction(config: [String: Any]) -> SKAction {
+        
+        let lowerDuration = config["lowerDuration"] as? Double ?? 2.0
+        let upperDuration = config["upperDuration"] as? Double ?? 5.0
+        
+        let eatingDuration = Double.random(in: lowerDuration...upperDuration)
+        let frameDuration = 0.25
+        let iterations = Int(eatingDuration / frameDuration)
+        
+        var stepActions: [SKAction] = []
+        
+        for i in 0..<iterations {
+            let changeFrame = SKAction.run { self.renderSprite(replaceSprite: self.eatingSprite[i % 2])  }
+            let waitStep = SKAction.wait(forDuration: frameDuration)
+            stepActions.append(changeFrame)
+            stepActions.append(waitStep)
+        }
+        
+        let resetToIdle = SKAction.run {
+            self.prevX = self.x
+            self.renderSprite()
+        }
+        
+        return SKAction.sequence([SKAction.sequence(stepActions), resetToIdle])
+    }
+    
     func taskToFunction(taskName: String) -> ([String: Any]) -> (SKAction) {
         switch taskName.lowercased() {
             case "study":
@@ -361,6 +408,8 @@ class ChungusScene: SKScene {
             return self.getWalkingAction
         case "exercise":
             return self.getJumpRopeAction
+        case "eat":
+            return self.getEatingAction
         default:
             return { _ in SKAction.wait(forDuration: 0.0)}
         }
@@ -378,6 +427,9 @@ class ChungusScene: SKScene {
                 self.stats.abs += 0.2
             case "exercise":
                 self.stats.abs += 1.0
+                self.stats.weight -= 1.0
+            case "eat":
+                self.stats.weight += 1
             default:
                 break
             }
@@ -392,7 +444,7 @@ class ChungusScene: SKScene {
     }
 
     func spriteLoop(lowerDuration: Double, upperDuration: Double, lowerDelay: Double = 2.0, upperDelay: Double = 5.0, step: Int = 2) {
-        
+                
         let config: [String: Any] = [
             "lowerDuration": lowerDuration,
             "upperDuration": upperDuration,
@@ -403,7 +455,7 @@ class ChungusScene: SKScene {
         var waitBetween: SKAction
                 
         if self.currentTask == "auto" {
-            let availabelActions = ["sleep", "exercise", "study", "walk"]
+            let availabelActions = ["sleep", "exercise", "study", "walk", "eat"]
             chosenAction = availabelActions.randomElement() ?? "study"
             waitBetween = SKAction.wait(forDuration: Double.random(in: lowerDelay...upperDelay))
         } else{
@@ -432,7 +484,7 @@ class ChungusScene: SKScene {
     
     func handleSpriteTask(taskName: String) {
         self.currentTask = taskName.lowercased()
-        print("Task \(self.currentTask) received!")
+        print("Task \(self.currentTask) received! < ABSOLUTE")
         self.restartSpriteLoop()
     }
 }

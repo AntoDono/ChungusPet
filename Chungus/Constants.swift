@@ -11,6 +11,7 @@ import SwiftUI
 struct SpriteConstant {
     static let width: Double = 80
     static let height: Double = 140
+    static let baseWeight: Double = 20
 }
 
 struct ScreenConstant {
@@ -21,7 +22,6 @@ struct ScreenConstant {
         return Double(NSScreen.main?.visibleFrame.height ?? 600)
     }
 }
-
 
 struct RuneTimeConstant {
     static let spriteDebug: Bool = true 

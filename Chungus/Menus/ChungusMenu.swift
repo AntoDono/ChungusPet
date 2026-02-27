@@ -29,7 +29,7 @@ struct ChungusMenuView: View {
             }
             HStack{
                 Text("Smarts: \(self.stats.intellect, specifier: "%.1f")")
-                Text("Happy: \(self.stats.happiness, specifier: "%.1f")")
+                Text("Weight: \(self.stats.weight, specifier: "%.1f")")
             }
             
             Divider()
@@ -43,6 +43,10 @@ struct ChungusMenuView: View {
             // 3. Your second row
             HStack(spacing: 10) {
                 actionButton(title: "Exercise")
+                actionButton(title: "Eat")
+            }
+            
+            HStack(spacing: 10){
                 actionButton(title: "Auto")
             }
             

@@ -9,18 +9,30 @@ import SwiftUI
 import SpriteKit // You need this to use SpriteView
 
 struct ContentView: View {
+    @StateObject private var stats = SpriteStats()
     
-    var scene: SKScene {
-        let scene = ChungusScene(size: CGSize(width: ScreenConstant.width * 1.2, height: ScreenConstant.height * 1.2))
-        scene.scaleMode = .resizeFill
-        return scene
-    }
+    @State private var scene: ChungusScene?
     
     var body: some View {
-        // 2. Use SpriteView to display it
-        // The [.allowsTransparency] option is the secret sauce to making
-        // sure the SpriteKit background doesn't default to black!
-        SpriteView(scene: scene, options: [.allowsTransparency])
-            .frame(width: SpriteConstant.width, height: SpriteConstant.height) // Keep the window small and tidy
+        Group {
+            // render if the scene exists, cause redrawing will screw up the Chungus instance
+            if let scene = scene {
+                SpriteView(scene: scene, options: [.allowsTransparency])
+                    .frame(
+                        width: max(1.5 * SpriteConstant.width, SpriteConstant.width * (stats.weight / SpriteConstant.baseWeight)),
+                        height: max(1.5 * SpriteConstant.height, SpriteConstant.height * (stats.weight / SpriteConstant.baseWeight))
+                    )
+            }
+        }
+        .onAppear {
+            // Initialize it when app starts
+            let newScene = ChungusScene(
+                size: CGSize(width: ScreenConstant.width * 1.5, height: ScreenConstant.height * 1.5),
+                stats: stats
+            )
+            print("Initialized an instance")
+            newScene.scaleMode = .resizeFill
+            self.scene = newScene
+        }
     }
 }
